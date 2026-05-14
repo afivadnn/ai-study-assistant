@@ -15,83 +15,73 @@ export function getSystemPrompt(mode, subject) {
 }
 
 /**
- * Sends messages to Gemini API and returns the response
+ * Sends messages to Groq API and returns the response
  * @param {Array} messages - Array of message objects in OpenAI format: { role: "user"/"assistant", content: "..." }
  * @param {string} mode - "explain" | "quiz" | "summary"
  * @param {string} subject - e.g., "Matematika", "Fisika", "Pemrograman Web"
  * @returns {Promise<string>} The AI response as a plain string
  */
 export async function sendMessage(messages, mode, subject) {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  
+  const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+
   if (!apiKey) {
-    throw new Error('VITE_GEMINI_API_KEY is not set in environment variables');
+    throw new Error('VITE_GROQ_API_KEY is not set in environment variables');
   }
 
   const systemPrompt = getSystemPrompt(mode, subject);
 
-  // Convert OpenAI format to Gemini format
-  const geminiMessages = [
+  // Build messages array with system prompt
+  const groqMessages = [
     {
-      role: 'user',
-      parts: [{ text: systemPrompt }],
+      role: 'system',
+      content: systemPrompt,
     },
-    {
-      role: 'model',
-      parts: [{ text: 'Siap, saya akan membantu sesuai peran tersebut.' }],
-    },
-    ...messages.map((msg) => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: msg.content }],
-    })),
+    ...messages,
   ];
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: geminiMessages,
-          generationConfig: {
-            maxOutputTokens: 2048,
-            temperature: 0.7,
-          },
-        }),
-      }
-    );
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'llama3-8b-8192',
+        messages: groqMessages,
+        max_tokens: 2048,
+        temperature: 0.7,
+      }),
+    });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      
-      if (response.status === 400) {
-        throw new Error('Bad request: ' + (errorData.error?.message || 'Invalid request format'));
+
+      if (response.status === 401) {
+        throw new Error('Invalid API key: Please check your VITE_GROQ_API_KEY');
       }
-      
-      if (response.status === 403) {
-        throw new Error('Invalid API key: Please check your VITE_GEMINI_API_KEY');
-      }
-      
+
       if (response.status === 429) {
         throw new Error('Quota exceeded: API rate limit reached. Please try again later.');
       }
-      
+
+      if (response.status === 500) {
+        throw new Error('Groq API server error. Please try again later.');
+      }
+
       throw new Error(`API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
     }
 
     const data = await response.json();
-    
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
-      throw new Error('Invalid response format from Gemini API');
+
+    if (!data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
+      throw new Error('Invalid response format from Groq API');
     }
 
-    return data.candidates[0].content.parts[0].text;
+    return data.choices[0].message.content;
   } catch (error) {
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new Error('Network error: Unable to connect to Gemini API');
+      throw new Error('Network error: Unable to connect to Groq API');
     }
     throw error;
   }
