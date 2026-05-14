@@ -45,9 +45,9 @@ function ChatPage() {
 
   // Passive API key check on page load (no API call)
   useEffect(() => {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_GROQ_API_KEY;
     if (!apiKey || apiKey === 'your-api-key-here' || apiKey === '') {
-      setConnectionError('API Key tidak valid — cek VITE_GEMINI_API_KEY');
+      setConnectionError('API Key tidak valid — cek VITE_GROQ_API_KEY');
     }
   }, []);
 
